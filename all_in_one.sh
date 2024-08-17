@@ -20,7 +20,7 @@ export PATH
 #
 # ——————————————————————————————————————————————————————————————————————————————————
 #
-DATE_VERSION="v1.7.2-2024_08_12_19_02"
+DATE_VERSION="v1.7.3-2024_08_17_15_25"
 #
 # ——————————————————————————————————————————————————————————————————————————————————
 amilys_embyserver_latest_version=4.8.8.0
@@ -1574,8 +1574,8 @@ function test_disk_capacity() {
         WARN "您已设置跳过磁盘容量检测"
         INFO "磁盘容量：${free_size_G}G"
     else
-        if [ "$free_size" -le 188743680 ]; then
-            ERROR "空间剩余容量不够：${free_size_G}G 小于最低要求 180G"
+        if [ "$free_size" -le 230686720 ]; then
+            ERROR "空间剩余容量不够：${free_size_G}G 小于最低要求 220G"
             exit 1
         else
             INFO "磁盘容量：${free_size_G}G"
@@ -5059,11 +5059,26 @@ function install_xiaoya_proxy() {
         config_dir=${CONFIG_DIR}
     fi
     INFO "小雅配置文件目录：${config_dir}"
+    container_run_extra_parameters=$(cat ${DDSREM_CONFIG_DIR}/container_run_extra_parameters.txt)
+    if [ "${container_run_extra_parameters}" == "true" ]; then
+        local RETURN_DATA
+        RETURN_DATA="$(data_crep "r" "install_xiaoya_proxy")"
+        if [ "${RETURN_DATA}" == "None" ]; then
+            INFO "请输入其他参数（默认 无 ）"
+            read -erp "Extra parameters:" extra_parameters
+        else
+            INFO "已读取您上次设置的参数：${RETURN_DATA} (默认不更改回车继续，如果需要更改请输入新参数)"
+            read -erp "Extra parameters:" extra_parameters
+            [[ -z "${extra_parameters}" ]] && extra_parameters=${RETURN_DATA}
+        fi
+        extra_parameters=$(data_crep "w" "install_xiaoya_proxy")
+    fi
     docker_pull "ddsderek/xiaoya-proxy:latest"
     docker run -d \
         --name=xiaoya-proxy \
         --restart=always \
         --net=host \
+        ${extra_parameters} \
         -e TZ=Asia/Shanghai \
         ddsderek/xiaoya-proxy:latest
     if [[ "${OSNAME}" = "macos" ]]; then
@@ -5771,17 +5786,27 @@ function reset_script_configuration() {
             echo -en "即将开始清理配置文件${Blue} $i ${Font}\r"
             sleep 1
         done
-        rm -rf ${DDSREM_CONFIG_DIR}/container_name
-        rm -f \
-            xiaoya_alist_tvbox_config_dir.txt \
-            xiaoya_alist_media_dir.txt \
-            xiaoya_alist_config_dir.txt \
-            resilio_config_dir.txt \
-            portainer_config_dir.txt \
-            onelist_config_dir.txt \
-            container_run_extra_parameters.txt \
-            auto_symlink_config_dir.txt \
-            data_downloader.txt
+        FILES_TO_REMOVE=(
+            "xiaoya_alist_tvbox_config_dir.txt"
+            "xiaoya_alist_media_dir.txt"
+            "xiaoya_alist_config_dir.txt"
+            "resilio_config_dir.txt"
+            "portainer_config_dir.txt"
+            "onelist_config_dir.txt"
+            "container_run_extra_parameters.txt"
+            "auto_symlink_config_dir.txt"
+            "data_downloader.txt"
+            "disk_capacity_detection.txt"
+            "xiaoya_connectivity_detection.txt"
+            "image_mirror.txt"
+            "image_mirror_user.txt"
+        )
+        for file in "${FILES_TO_REMOVE[@]}"; do
+            rm -f ${DDSREM_CONFIG_DIR}/$file
+        done
+        rm -rf \
+            ${DDSREM_CONFIG_DIR}/container_name \
+            ${DDSREM_CONFIG_DIR}/data_crep
         INFO "清理完成！"
 
         for i in $(seq -w 3 -1 0); do
@@ -5971,7 +5996,7 @@ function main_return() {
         fi
     fi
     echo -e "${out_tips}1、安装/更新/卸载 小雅Alist & 账号管理        当前状态：$(judgment_container "${xiaoya_alist_name}")
-2、安装/卸载 小雅Emby全家桶                   当前状态：$(judgment_container "${xiaoya_emby_name}")
+2、安装/更新/卸载 小雅Emby全家桶              当前状态：$(judgment_container "${xiaoya_emby_name}")
 3、安装/卸载 小雅Jellyfin全家桶               当前状态：$(judgment_container "${xiaoya_jellyfin_name}")
 4、安装/更新/卸载 小雅助手（xiaoyahelper）    当前状态：$(judgment_container xiaoyakeeper)
 5、安装/更新/卸载 小雅Alist-TVBox（非原版）   当前状态：$(judgment_container "${xiaoya_tvbox_name}")
