@@ -1,6 +1,7 @@
 #!/bin/bash
 # shellcheck shell=bash
 # shellcheck disable=SC2086
+# shellcheck source=/dev/null
 PATH=${PATH}:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin:/opt/homebrew/bin
 export PATH
 #
@@ -45,6 +46,7 @@ function WARN() {
     echo -e "${WARN} ${1}"
 }
 
+# shellcheck disable=SC2034
 mirrors=(
     "docker.io"
     "registry-docker-hub-latest-9vqc.onrender.com"
@@ -67,435 +69,6 @@ function root_need() {
     fi
 }
 
-function ___install_docker() {
-
-    if ! command -v docker; then
-        WARN "docker 未安装，脚本尝试自动安装..."
-        wget -qO- get.docker.com | bash
-        if command -v docker; then
-            INFO "docker 安装成功！"
-        else
-            ERROR "docker 安装失败，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function packages_apt_install() {
-
-    if ! command -v ${1}; then
-        WARN "${1} 未安装，脚本尝试自动安装..."
-        apt update -y
-        if apt install -y ${1}; then
-            INFO "${1} 安装成功！"
-        else
-            ERROR "${1} 安装失败，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function packages_yum_install() {
-
-    if ! command -v ${1}; then
-        WARN "${1} 未安装，脚本尝试自动安装..."
-        if yum install -y ${1}; then
-            INFO "${1} 安装成功！"
-        else
-            ERROR "${1} 安装失败，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function packages_zypper_install() {
-
-    if ! command -v ${1}; then
-        WARN "${1} 未安装，脚本尝试自动安装..."
-        zypper refresh
-        if zypper install ${1}; then
-            INFO "${1} 安装成功！"
-        else
-            ERROR "${1} 安装失败，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function packages_apk_install() {
-
-    if ! command -v ${1}; then
-        WARN "${1} 未安装，脚本尝试自动安装..."
-        if apk add ${1}; then
-            INFO "${1} 安装成功！"
-        else
-            ERROR "${1} 安装失败，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function packages_pacman_install() {
-
-    if ! command -v ${1}; then
-        WARN "${1} 未安装，脚本尝试自动安装..."
-        if pacman -Sy --noconfirm ${1}; then
-            INFO "${1} 安装成功！"
-        else
-            ERROR "${1} 安装失败，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function packages_need() {
-
-    if [ "$1" == "apt" ]; then
-        packages_apt_install curl
-        packages_apt_install wget
-        ___install_docker
-    elif [ "$1" == "yum" ]; then
-        packages_yum_install curl
-        packages_yum_install wget
-        ___install_docker
-    elif [ "$1" == "zypper" ]; then
-        packages_zypper_install curl
-        packages_zypper_install wget
-        ___install_docker
-    elif [ "$1" == "apk_alpine" ]; then
-        packages_apk_install curl
-        packages_apk_install wget
-        packages_apk_install docker
-    elif [ "$1" == "pacman" ]; then
-        packages_pacman_install curl
-        packages_pacman_install wget
-        packages_pacman_install docker
-    else
-        if ! command -v curl; then
-            ERROR "curl 未安装，请手动安装！"
-            exit 1
-        fi
-        if ! command -v wget; then
-            ERROR "wget 未安装，请手动安装！"
-            exit 1
-        fi
-        if ! command -v docker; then
-            ERROR "docker 未安装，请手动安装！"
-            exit 1
-        fi
-    fi
-
-}
-
-function get_os() {
-
-    if command -v getconf > /dev/null 2>&1; then
-        is64bit="$(getconf LONG_BIT)bit"
-    else
-        is64bit="unknow"
-    fi
-    _os=$(uname -s)
-    _os_all=$(uname -a)
-    if [ "${_os}" == "Darwin" ]; then
-        OSNAME='macos'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-        stty -icanon
-    # 必须先判断的系统
-    # 绿联旧版UGOS 基于 OpenWRT
-    elif [ -f /etc/openwrt_version ] && echo -e "${_os_all}" | grep -Eqi "UGREEN"; then
-        OSNAME='ugos'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    # 绿联UGOS Pro 基于 Debian
-    elif grep -Eqi "Debian" /etc/os-release && grep -Eqi "UGOSPRO" /etc/issue; then
-        OSNAME='ugos pro'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    # OpenMediaVault 基于 Debian
-    elif grep -Eqi "openmediavault" /etc/issue || grep -Eqi "openmediavault" /etc/os-release; then
-        OSNAME='openmediavault'
-        packages_need "apt"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    # FreeNAS（TrueNAS CORE）基于 FreeBSD
-    elif echo -e "${_os_all}" | grep -Eqi "FreeBSD" | grep -Eqi "TRUENAS"; then
-        OSNAME='truenas core'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    # TrueNAS SCALE 基于 Debian
-    elif grep -Eqi "Debian" /etc/issue && [ -f /etc/version ]; then
-        OSNAME='truenas scale'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif [ -f /etc/synoinfo.conf ]; then
-        OSNAME='synology'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif [ -f /etc/openwrt_release ]; then
-        OSNAME='openwrt'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "QNAP" /etc/issue; then
-        OSNAME='qnap'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif [ -f /etc/unraid-version ]; then
-        OSNAME='unraid'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "LibreELEC" /etc/issue || grep -Eqi "LibreELEC" /etc/*-release; then
-        OSNAME='libreelec'
-        DDSREM_CONFIG_DIR=/storage/DDSRem
-        ERROR "LibreELEC 系统目前不支持！"
-        exit 1
-    elif grep -Eqi "openSUSE" /etc/*-release; then
-        OSNAME='opensuse'
-        packages_need "zypper"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "FreeBSD" /etc/*-release; then
-        OSNAME='freebsd'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "EulerOS" /etc/*-release || grep -Eqi "openEuler" /etc/*-release; then
-        OSNAME='euler'
-        packages_need "yum"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "CentOS" /etc/issue || grep -Eqi "CentOS" /etc/*-release; then
-        OSNAME='centos'
-        packages_need "yum"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Fedora" /etc/issue || grep -Eqi "Fedora" /etc/*-release; then
-        OSNAME='fedora'
-        packages_need "yum"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Rocky" /etc/issue || grep -Eqi "Rocky" /etc/*-release; then
-        OSNAME='rocky'
-        packages_need "yum"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "AlmaLinux" /etc/issue || grep -Eqi "AlmaLinux" /etc/*-release; then
-        OSNAME='almalinux'
-        packages_need "yum"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Arch Linux" /etc/issue || grep -Eqi "Arch Linux" /etc/*-release; then
-        OSNAME='archlinux'
-        packages_need "pacman"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Amazon Linux" /etc/issue || grep -Eqi "Amazon Linux" /etc/*-release; then
-        OSNAME='amazon'
-        packages_need "yum"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Debian" /etc/issue || grep -Eqi "Debian" /etc/os-release; then
-        OSNAME='debian'
-        packages_need "apt"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Ubuntu" /etc/issue || grep -Eqi "Ubuntu" /etc/os-release; then
-        OSNAME='ubuntu'
-        packages_need "apt"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    elif grep -Eqi "Alpine" /etc/issue || grep -Eq "Alpine" /etc/*-release; then
-        OSNAME='alpine'
-        packages_need "apk_alpine"
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    else
-        OSNAME='unknow'
-        packages_need
-        DDSREM_CONFIG_DIR=/etc/DDSRem
-    fi
-
-    HOSTS_FILE_PATH=/etc/hosts
-
-}
-
-function sedsh() {
-
-    if [[ "${OSNAME}" = "macos" ]]; then
-        sed -i '' "$@"
-    else
-        sed -i "$@"
-    fi
-
-}
-
-function show_disk_mount() {
-
-    df -h | grep -E -v "Avail|loop|boot|overlay|tmpfs|proc" | sort -nr -k 4
-
-}
-
-function judgment_container() {
-
-    if docker container inspect "${1}" > /dev/null 2>&1; then
-        local container_status
-        container_status=$(docker inspect --format='{{.State.Status}}' "${1}")
-        case "${container_status}" in
-        "created")
-            echo -e "${Blue}已创建${Font}"
-            ;;
-        "running")
-            echo -e "${Green}运行中${Font}"
-            ;;
-        "paused")
-            echo -e "${Blue}已暂停${Font}"
-            ;;
-        "restarting")
-            echo -e "${Blue}重启中${Font}"
-            ;;
-        "removing")
-            echo -e "${Blue}删除中${Font}"
-            ;;
-        "exited")
-            echo -e "${Yellow}已停止${Font}"
-            ;;
-        "dead")
-            echo -e "${Red}不可用${Font}"
-            ;;
-        *)
-            echo -e "${Red}未知状态${Font}"
-            ;;
-        esac
-    else
-        echo -e "${Red}未安装${Font}"
-    fi
-
-}
-
-function return_menu() {
-
-    INFO "是否返回菜单继续配置 [Y/n]"
-    answer=""
-    t=60
-    while [[ -z "$answer" && $t -gt 0 ]]; do
-        printf "\r%2d 秒后将自动退出脚本：" $t
-        read -r -t 1 -n 1 answer
-        t=$((t - 1))
-    done
-    [[ -z "${answer}" ]] && answer="n"
-    if [[ ${answer} == [Yy] ]]; then
-        clear
-        "${@}"
-    else
-        echo -e "\n"
-        exit 0
-    fi
-
-}
-
-function docker_pull() {
-
-    retries=0
-    max_retries=3
-
-    IMAGE_MIRROR=$(cat "${DDSREM_CONFIG_DIR}/image_mirror.txt")
-
-    if docker inspect "${1}" > /dev/null 2>&1; then
-        INFO "发现旧 ${1} 镜像，删除中..."
-        docker rmi "${1}" > /dev/null 2>&1
-    fi
-
-    while [ $retries -lt $max_retries ]; do
-        if docker pull "${IMAGE_MIRROR}/${1}"; then
-            INFO "${1} 镜像拉取成功！"
-            break
-        else
-            WARN "${1} 镜像拉取失败，正在进行第 $((retries + 1)) 次重试..."
-            retries=$((retries + 1))
-        fi
-    done
-
-    if [ $retries -eq $max_retries ]; then
-        ERROR "镜像拉取失败，已达到最大重试次数！"
-        ERROR "请进入主菜单选择数字 ${Sky_Blue}9 6${Font} 进入 ${Sky_Blue}Docker镜像源选择${Font} 配置镜像源地址！"
-        exit 1
-    else
-        if [ "${IMAGE_MIRROR}" != "docker.io" ]; then
-            docker tag "${IMAGE_MIRROR}/${1}" "${1}" > /dev/null 2>&1
-            docker rmi "${IMAGE_MIRROR}/${1}" > /dev/null 2>&1
-        fi
-        return 0
-    fi
-
-}
-
-function container_update() {
-
-    local run_image remove_image IMAGE_MIRROR pull_image
-    if docker inspect ddsderek/runlike:latest > /dev/null 2>&1; then
-        local_sha=$(docker inspect --format='{{index .RepoDigests 0}}' ddsderek/runlike:latest 2> /dev/null | cut -f2 -d:)
-        remote_sha=$(curl -s -m 10 "https://hub.docker.com/v2/repositories/ddsderek/runlike/tags/latest" | grep -o '"digest":"[^"]*' | grep -o '[^"]*$' | tail -n1 | cut -f2 -d:)
-        if [ "$local_sha" != "$remote_sha" ]; then
-            docker rmi ddsderek/runlike:latest
-            docker_pull "ddsderek/runlike:latest"
-        fi
-    else
-        docker_pull "ddsderek/runlike:latest"
-    fi
-    INFO "获取 ${1} 容器信息中..."
-    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /tmp:/tmp ddsderek/runlike -p "${@}" > "/tmp/container_update_${*}"
-    if [ -n "${container_update_extra_command}" ]; then
-        eval "${container_update_extra_command}"
-    fi
-    run_image=$(docker container inspect -f '{{.Config.Image}}' "${@}")
-    remove_image=$(docker images -q ${run_image})
-    local retries=0
-    local max_retries=3
-    IMAGE_MIRROR=$(cat "${DDSREM_CONFIG_DIR}/image_mirror.txt")
-    while [ $retries -lt $max_retries ]; do
-        if docker pull "${IMAGE_MIRROR}/${run_image}"; then
-            INFO "${1} 镜像拉取成功！"
-            break
-        else
-            WARN "${1} 镜像拉取失败，正在进行第 $((retries + 1)) 次重试..."
-            retries=$((retries + 1))
-        fi
-    done
-    if [ $retries -eq $max_retries ]; then
-        ERROR "镜像拉取失败，已达到最大重试次数！"
-        return 1
-    else
-        if [ "${IMAGE_MIRROR}" != "docker.io" ]; then
-            pull_image=$(docker images -q "${IMAGE_MIRROR}/${run_image}")
-        else
-            pull_image=$(docker images -q "${run_image}")
-        fi
-        if ! docker stop "${@}" > /dev/null 2>&1; then
-            if ! docker kill "${@}" > /dev/null 2>&1; then
-                docker rmi "${IMAGE_MIRROR}/${run_image}"
-                ERROR "更新失败，停止 ${*} 容器失败！"
-                return 1
-            fi
-        fi
-        INFO "停止 ${*} 容器成功！"
-        if ! docker rm --force "${@}" > /dev/null 2>&1; then
-            ERROR "更新失败，删除 ${*} 容器失败！"
-            return 1
-        fi
-        INFO "删除 ${*} 容器成功！"
-        if [ "${pull_image}" != "${remove_image}" ]; then
-            INFO "删除 ${remove_image} 镜像中..."
-            docker rmi "${remove_image}" > /dev/null 2>&1
-        fi
-        if [ "${IMAGE_MIRROR}" != "docker.io" ]; then
-            docker tag "${IMAGE_MIRROR}/${run_image}" "${run_image}" > /dev/null 2>&1
-            docker rmi "${IMAGE_MIRROR}/${run_image}" > /dev/null 2>&1
-        fi
-        if bash "/tmp/container_update_${*}"; then
-            rm -f "/tmp/container_update_${*}"
-            INFO "${*} 更新成功"
-            return 0
-        else
-            ERROR "更新失败，创建 ${*} 容器失败！"
-            return 1
-        fi
-    fi
-
-}
-
 function wait_emby_start() {
 
     start_time=$(date +%s)
@@ -514,26 +87,6 @@ function wait_emby_start() {
             break
         fi
         sleep 8
-    done
-
-}
-
-function wait_jellyfin_start() {
-
-    start_time=$(date +%s)
-    CONTAINER_NAME="$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_jellyfin_name.txt)"
-    while true; do
-        if [ "$(docker inspect --format='{{json .State.Health.Status}}' "${CONTAINER_NAME}" | sed 's/"//g')" == "healthy" ]; then
-            break
-        fi
-        current_time=$(date +%s)
-        elapsed_time=$((current_time - start_time))
-        if [ "$elapsed_time" -gt 900 ]; then
-            WARN "Jellyfin 未正常启动超时 15 分钟！"
-            break
-        fi
-        sleep 10
-        INFO "等待 Jellyfin 初始化完成中..."
     done
 
 }
@@ -937,6 +490,10 @@ function enter_aliyunpan_opentoken() {
 
 function settings_aliyunpan_opentoken() {
 
+    if [ -f "${1}/open_tv_token_url.txt" ]; then
+        mv "${1}/open_tv_token_url.txt" "${1}/open_tv_token_url.txt.bak"
+    fi
+
     if [ "${2}" == "force" ]; then
         qrcode_aliyunpan_opentoken "${1}"
     else
@@ -1059,9 +616,106 @@ function settings_uc_cookie() {
 
 }
 
+function enter_pikpak_account() {
+
+    touch ${1}/pikpak.txt
+    INFO "输入你的 PikPak 账号（手机号或邮箱）"
+    INFO "如果手机号，要\"+区号\"，比如你的手机号\"12345678900\"那么就填\"+8612345678900\""
+    read -erp "PikPak_Username:" PikPak_Username
+    INFO "输入你的 PikPak 账号密码"
+    read -erp "PikPak_Password:" PikPak_Password
+    INFO "输入你的 PikPak X-Device-Id"
+    read -erp "PikPak_Device_Id:" PikPak_Device_Id
+    echo -e "\"${PikPak_Username}\" \"${PikPak_Password}\" \"web\" \"${PikPak_Device_Id}\"" > ${1}/pikpak.txt
+
+}
+
+function settings_pikpak_account() {
+
+    if [ "${2}" == "force" ]; then
+        enter_pikpak_account "${1}"
+    else
+        if [ ! -f "${1}/pikpak.txt" ]; then
+            INFO "是否继续配置 PikPak 账号密码 [Y/n]（默认 n 不配置）"
+            read -erp "PikPak_Set:" PikPak_Set
+            [[ -z "${PikPak_Set}" ]] && PikPak_Set="n"
+            if [[ ${PikPak_Set} == [Yy] ]]; then
+                enter_pikpak_account "${1}"
+            fi
+        fi
+    fi
+
+}
+
+function enter_ali2115() {
+
+    touch ${1}/ali2115.txt
+    if [ -f "${1}/115_cookie.txt" ] && check_115_cookie "${1}"; then
+        INFO "自动获取 115 Cookie！"
+        set_115_cookie="$(cat ${1}/115_cookie.txt | head -n1)"
+    else
+        while true; do
+            INFO "输入你的 115 Cookie"
+            read -erp "Cookie:" set_115_cookie
+            if [ -n "${set_115_cookie}" ]; then
+                break
+            fi
+        done
+    fi
+    INFO "是否自动删除115转存文件 [Y/n]（默认 Y）"
+    read -erp "purge_pan115_temp:" purge_pan115_temp
+    [[ -z "${purge_pan115_temp}" ]] && purge_pan115_temp="y"
+    INFO "是否自动删除阿里云盘转存文件 [Y/n]（默认 Y）"
+    read -erp "purge_ali_temp:" purge_ali_temp
+    [[ -z "${purge_ali_temp}" ]] && purge_ali_temp="y"
+    INFO "输入你的 115 转存文件夹 id（默认 0）"
+    read -erp "dir_id:" dir_id
+    [[ -z "${dir_id}" ]] && dir_id=0
+    if [[ ${purge_pan115_temp} == [Yy] ]]; then
+        purge_pan115_temp=true
+    else
+        purge_pan115_temp=false
+    fi
+    if [[ ${purge_ali_temp} == [Yy] ]]; then
+        purge_ali_temp=true
+    else
+        purge_ali_temp=false
+    fi
+    echo -e "purge_ali_temp=${purge_ali_temp}\ncookie=\"${set_115_cookie}\"\npurge_pan115_temp=${purge_pan115_temp}\ndir_id=${dir_id}" > ${1}/ali2115.txt
+
+}
+
+function settings_ali2115() {
+
+    if [ "${2}" == "force" ]; then
+        enter_ali2115 "${1}"
+    else
+        if [ ! -f "${1}/ali2115.txt" ]; then
+            INFO "是否配置 阿里转存115播放（ali2115.txt） [Y/n]（默认 n 不配置）"
+            read -erp "ali2115:" ali2115_set
+            [[ -z "${ali2115_set}" ]] && ali2115_set="n"
+            if [[ ${ali2115_set} == [Yy] ]]; then
+                enter_ali2115 "${1}"
+            fi
+        fi
+    fi
+
+}
+
 function get_config_dir() {
 
-    if [ -f ${DDSREM_CONFIG_DIR}/xiaoya_alist_config_dir.txt ]; then
+    if docker container inspect "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)" > /dev/null 2>&1; then
+        xiaoya_config_dir="$(docker inspect --format='{{range $v,$conf := .Mounts}}{{$conf.Source}}:{{$conf.Destination}}{{$conf.Type}}~{{end}}' "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)" | tr '~' '\n' | grep bind | sed 's/bind//g' | grep ":/data$" | awk -F: '{print $1}')"
+    fi
+
+    if [ -n "${xiaoya_config_dir}" ]; then
+        xiaoya_config_dir=$(cat ${DDSREM_CONFIG_DIR}/xiaoya_alist_config_dir.txt)
+        INFO "小雅配置目录通过小雅容器获取"
+        INFO "已读取小雅Alist配置文件路径：${xiaoya_config_dir} (默认不更改回车继续，如果需要更改请输入新路径)"
+        read -erp "CONFIG_DIR:" CONFIG_DIR
+        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR=${xiaoya_config_dir}
+        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/xiaoya_alist_config_dir.txt
+    elif [ -f ${DDSREM_CONFIG_DIR}/xiaoya_alist_config_dir.txt ]; then
         OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/xiaoya_alist_config_dir.txt)
         INFO "已读取小雅Alist配置文件路径：${OLD_CONFIG_DIR} (默认不更改回车继续，如果需要更改请输入新路径)"
         read -erp "CONFIG_DIR:" CONFIG_DIR
@@ -1117,31 +771,6 @@ function get_media_dir() {
 
 }
 
-function data_crep() { # container_run_extra_parameters
-
-    local MODE="${1}"
-    local DATA="${2}"
-    local DIR="${DDSREM_CONFIG_DIR}/data_crep"
-
-    if [ "${MODE}" == "read" ] || [ "${MODE}" == "r" ]; then
-        if [ -f "${DIR}/${DATA}.txt" ]; then
-            cat ${DIR}/${DATA}.txt | head -n1
-        else
-            echo "None"
-        fi
-    elif [ "${MODE}" == "write" ] || [ "${MODE}" == "w" ]; then
-        if [ "${extra_parameters}" == "None" ]; then
-            echo > ${DIR}/${DATA}.txt
-        else
-            echo "${extra_parameters}" > ${DIR}/${DATA}.txt
-        fi
-        cat ${DIR}/${DATA}.txt | head -n1
-    else
-        return 1
-    fi
-
-}
-
 function main_account_management() {
 
     clear
@@ -1157,16 +786,23 @@ function main_account_management() {
 
     echo -e "——————————————————————————————————————————————————————————————————————————————————"
     echo -e "${Blue}账号管理${Font}\n"
+    echo -e "${Sky_Blue}小雅留言，会员购买指南：
+基础版：阿里非会员+115会员+夸克88vip
+升级版：阿里svip+115会员+夸克88vip（用TV token破解阿里svip的高速流量限制）
+豪华版：阿里svip+第三方权益包+115会员+夸克svip
+乞丐版：满足看emby画报但不要播放，播放用tvbox各种免费源${Font}\n"
     echo -ne "${INFO} 界面加载中...${Font}\r"
     echo -e "1、115 Cookie                        （当前：$(if CHECK_OUT=$(check_115_cookie "${config_dir}"); then echo -e "${Green}$(echo -e ${CHECK_OUT} | sed 's/\[.*\] //')${Font}"; else echo -e "${Red}错误${Font}"; fi)）
 2、夸克 Cookie                       （当前：$(if CHECK_OUT=$(check_quark_cookie "${config_dir}"); then echo -e "${Green}$(echo -e ${CHECK_OUT} | sed 's/\[.*\] //')${Font}"; else echo -e "${Red}错误${Font}"; fi)）
 3、阿里云盘 Refresh Token（mytoken） （当前：$(if [ -f "${config_dir}/mytoken.txt" ]; then echo -e "${Green}已配置${Font}"; else echo -e "${Red}未配置${Font}"; fi)）
-4、阿里云盘 Open Token（myopentoken）（当前：$(if [ -f "${config_dir}/myopentoken.txt" ]; then echo -e "${Green}已配置${Font}"; else echo -e "${Red}未配置${Font}"; fi)）
-5、UC Cookie                         （当前：$(if CHECK_OUT=$(check_uc_cookie "${config_dir}"); then echo -e "${Green}$(echo -e ${CHECK_OUT} | sed 's/\[.*\] //')${Font}"; else echo -e "${Red}错误${Font}"; fi)）"
-    echo -e "6、应用配置（自动重启小雅，并返回上级菜单）"
+4、阿里云盘 Open Token（myopentoken）（当前：$(if [ -f "${config_dir}/myopentoken.txt" ]; then if [ -f "${config_dir}/open_tv_token_url.txt" ]; then echo -e "${Green}已配置 TV Token${Font}"; else echo -e "${Green}已配置${Font}"; fi; else echo -e "${Red}未配置${Font}"; fi)）
+5、UC Cookie                         （当前：$(if CHECK_OUT=$(check_uc_cookie "${config_dir}"); then echo -e "${Green}$(echo -e ${CHECK_OUT} | sed 's/\[.*\] //')${Font}"; else echo -e "${Red}错误${Font}"; fi)）
+6、PikPak                            （当前：$(if [ -f "${config_dir}/pikpak.txt" ]; then echo -e "${Green}已配置${Font}"; else echo -e "${Red}未配置${Font}"; fi)）
+7、阿里转存115播放（ali2115.txt）    （当前：$(if [ -f "${config_dir}/ali2115.txt" ]; then echo -e "${Green}已配置${Font}"; else echo -e "${Red}未配置${Font}"; fi)）"
+    echo -e "8、应用配置（自动重启小雅，并返回上级菜单）"
     echo -e "0、返回上级（从此处退出不会重启小雅，如果更改了上述配置请手动重启）"
     echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-6]:" num
+    read -erp "请输入数字 [0-8]:" num
     case "$num" in
     1)
         clear
@@ -1190,10 +826,20 @@ function main_account_management() {
         ;;
     5)
         clear
-        settings_uc_cookie "${CONFIG_DIR}" force
+        settings_uc_cookie "${config_dir}" force
         main_account_management
         ;;
     6)
+        clear
+        settings_pikpak_account "${config_dir}" force
+        main_account_management
+        ;;
+    7)
+        clear
+        settings_ali2115 "${config_dir}" force
+        main_account_management
+        ;;
+    8)
         clear
         if docker container inspect "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)" > /dev/null 2>&1; then
             INFO "重启小雅容器中..."
@@ -1216,7 +862,7 @@ function main_account_management() {
         ;;
     *)
         clear
-        ERROR '请输入正确数字 [0-6]'
+        ERROR '请输入正确数字 [0-8]'
         main_account_management
         ;;
     esac
@@ -1263,26 +909,15 @@ function install_xiaoya_alist() {
         fi
     fi
 
-    if [ ! -f "${CONFIG_DIR}/pikpak.txt" ]; then
-        INFO "是否继续配置 PikPak 账号密码 [Y/n]（默认 n 不配置）"
-        read -erp "PikPak_Set:" PikPak_Set
-        [[ -z "${PikPak_Set}" ]] && PikPak_Set="n"
-        if [[ ${PikPak_Set} == [Yy] ]]; then
-            touch ${CONFIG_DIR}/pikpak.txt
-            INFO "输入你的 PikPak 账号（手机号或邮箱）"
-            INFO "如果手机号，要\"+区号\"，比如你的手机号\"12345678900\"那么就填\"+8612345678900\""
-            read -erp "PikPak_Username:" PikPak_Username
-            INFO "输入你的 PikPak 账号密码"
-            read -erp "PikPak_Password:" PikPak_Password
-            echo -e "\"${PikPak_Username}\" \"${PikPak_Password}\"" > ${CONFIG_DIR}/pikpak.txt
-        fi
-    fi
+    settings_pikpak_account "${CONFIG_DIR}"
 
     settings_quark_cookie "${CONFIG_DIR}"
 
     settings_uc_cookie "${CONFIG_DIR}"
 
     settings_115_cookie "${CONFIG_DIR}"
+
+    settings_ali2115 "${CONFIG_DIR}"
 
     if [[ "${OSNAME}" = "macos" ]]; then
         localip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
@@ -2251,530 +1886,6 @@ function main_download_unzip_xiaoya_emby() {
 
 }
 
-function download_wget_unzip_xiaoya_all_jellyfin() {
-
-    get_config_dir
-
-    get_media_dir
-
-    test_xiaoya_status
-
-    mkdir -p "${MEDIA_DIR}/temp"
-    if [ -d "${MEDIA_DIR}/config" ]; then
-        rm -rf ${MEDIA_DIR}/config
-    fi
-
-    test_disk_capacity
-
-    mkdir -p "${MEDIA_DIR}/xiaoya"
-    mkdir -p "${MEDIA_DIR}/temp"
-    chown 0:0 "${MEDIA_DIR}"
-    chmod 777 "${MEDIA_DIR}"
-
-    local files=("config_jf.mp4" "all_jf.mp4" "PikPak_jf.mp4")
-    for file in "${files[@]}"; do
-        if [ -f "${MEDIA_DIR}/temp/${file}.aria2" ]; then
-            rm -rf "${MEDIA_DIR}/temp/${file}.aria2"
-        fi
-    done
-
-    INFO "开始下载解压..."
-
-    extra_parameters="--workdir=/media/temp"
-    if ! pull_run_glue wget -c --show-progress "${xiaoya_addr}/d/元数据/Jellyfin/config_jf.mp4"; then
-        ERROR "config_jf.mp4 下载失败！"
-        exit 1
-    fi
-    if ! pull_run_glue wget -c --show-progress "${xiaoya_addr}/d/元数据/Jellyfin/all_jf.mp4"; then
-        ERROR "all_jf.mp4 下载失败！"
-        exit 1
-    fi
-    if ! pull_run_glue wget -c --show-progress "${xiaoya_addr}/d/元数据/Jellyfin/PikPak_jf.mp4"; then
-        ERROR "PikPak_jf.mp4 下载失败！"
-        exit 1
-    fi
-
-    start_time1=$(date +%s)
-
-    config_size=$(du -k ${MEDIA_DIR}/temp/config_jf.mp4 | cut -f1)
-    if [[ "$config_size" -le 3200000 ]]; then
-        ERROR "config_jf.mp4 下载不完整，文件大小(in KB):$config_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media"
-    pull_run_glue 7z x -aoa -mmt=16 temp/config_jf.mp4
-    mv ${MEDIA_DIR}/jf_config ${MEDIA_DIR}/config
-
-    all_size=$(du -k ${MEDIA_DIR}/temp/all_jf.mp4 | cut -f1)
-    if [[ "$all_size" -le 30000000 ]]; then
-        ERROR "all_jf.mp4 下载不完整，文件大小(in KB):$all_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media/xiaoya"
-    pull_run_glue 7z x -aoa -mmt=16 /media/temp/all_jf.mp4
-
-    pikpak_size=$(du -k ${MEDIA_DIR}/temp/PikPak_jf.mp4 | cut -f1)
-    if [[ "$pikpak_size" -le 14000000 ]]; then
-        ERROR "PikPak_jf.mp4 下载不完整，文件大小(in KB):$pikpak_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media/xiaoya"
-    pull_run_glue 7z x -aoa -mmt=16 /media/temp/PikPak_jf.mp4
-
-    end_time1=$(date +%s)
-    total_time1=$((end_time1 - start_time1))
-    total_time1=$((total_time1 / 60))
-    INFO "解压执行时间：$total_time1 分钟"
-
-    INFO "设置目录权限..."
-    INFO "这可能需要一定时间，请耐心等待！"
-    chmod -R 777 "${MEDIA_DIR}"
-
-}
-
-function download_unzip_xiaoya_all_jellyfin() {
-
-    get_config_dir
-
-    get_media_dir
-
-    test_xiaoya_status
-
-    mkdir -p "${MEDIA_DIR}/temp"
-    if [ -d "${MEDIA_DIR}/config" ]; then
-        rm -rf ${MEDIA_DIR}/config
-    fi
-
-    test_disk_capacity
-
-    mkdir -p "${MEDIA_DIR}/xiaoya"
-    mkdir -p "${MEDIA_DIR}/temp"
-    chown 0:0 "${MEDIA_DIR}"
-    chmod 777 "${MEDIA_DIR}"
-
-    local files=("config_jf.mp4" "all_jf.mp4" "PikPak_jf.mp4")
-    for file in "${files[@]}"; do
-        if [ -f "${MEDIA_DIR}/temp/${file}.aria2" ]; then
-            rm -rf "${MEDIA_DIR}/temp/${file}.aria2"
-        fi
-    done
-
-    INFO "开始下载解压..."
-
-    extra_parameters="--workdir=/media/temp"
-    if pull_run_glue aria2c -o config_jf.mp4 --allow-overwrite=true --auto-file-renaming=false --enable-color=false -c -x6 "${xiaoya_addr}/d/元数据/Jellyfin/config_jf.mp4"; then
-        if [ -f "${MEDIA_DIR}/temp/config_jf.mp4.aria2" ]; then
-            ERROR "存在 ${MEDIA_DIR}/temp/config_jf.mp4.aria2 文件，下载不完整！"
-            exit 1
-        else
-            INFO "config_jf.mp4 下载成功！"
-        fi
-    else
-        ERROR "config_jf.mp4 下载失败！"
-        exit 1
-    fi
-    if pull_run_glue aria2c -o all_jf.mp4 --allow-overwrite=true --auto-file-renaming=false --enable-color=false -c -x6 "${xiaoya_addr}/d/元数据/Jellyfin/all_jf.mp4"; then
-        if [ -f "${MEDIA_DIR}/temp/all_jf.mp4.aria2" ]; then
-            ERROR "存在 ${MEDIA_DIR}/temp/all_jf.mp4.aria2 文件，下载不完整！"
-            exit 1
-        else
-            INFO "all_jf.mp4 下载成功！"
-        fi
-    else
-        ERROR "all_jf.mp4 下载失败！"
-        exit 1
-    fi
-    if pull_run_glue aria2c -o PikPak_jf.mp4 --allow-overwrite=true --auto-file-renaming=false --enable-color=false -c -x6 "${xiaoya_addr}/d/元数据/Jellyfin/PikPak_jf.mp4"; then
-        if [ -f "${MEDIA_DIR}/temp/PikPak_jf.mp4.aria2" ]; then
-            ERROR "存在 ${MEDIA_DIR}/temp/PikPak_jf.mp4.aria2 文件，下载不完整！"
-            exit 1
-        else
-            INFO "PikPak_jf.mp4 下载成功！"
-        fi
-    else
-        ERROR "PikPak_jf.mp4 下载失败！"
-        exit 1
-    fi
-
-    start_time1=$(date +%s)
-
-    config_size=$(du -k ${MEDIA_DIR}/temp/config_jf.mp4 | cut -f1)
-    if [[ "$config_size" -le 3200000 ]]; then
-        ERROR "config_jf.mp4 下载不完整，文件大小(in KB):$config_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media"
-    pull_run_glue 7z x -aoa -mmt=16 temp/config_jf.mp4
-    mv ${MEDIA_DIR}/jf_config ${MEDIA_DIR}/config
-
-    all_size=$(du -k ${MEDIA_DIR}/temp/all_jf.mp4 | cut -f1)
-    if [[ "$all_size" -le 30000000 ]]; then
-        ERROR "all_jf.mp4 下载不完整，文件大小(in KB):$all_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media/xiaoya"
-    pull_run_glue 7z x -aoa -mmt=16 /media/temp/all_jf.mp4
-
-    pikpak_size=$(du -k ${MEDIA_DIR}/temp/PikPak_jf.mp4 | cut -f1)
-    if [[ "$pikpak_size" -le 14000000 ]]; then
-        ERROR "PikPak_jf.mp4 下载不完整，文件大小(in KB):$pikpak_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media/xiaoya"
-    pull_run_glue 7z x -aoa -mmt=16 /media/temp/PikPak_jf.mp4
-
-    end_time1=$(date +%s)
-    total_time1=$((end_time1 - start_time1))
-    total_time1=$((total_time1 / 60))
-    INFO "解压执行时间：$total_time1 分钟"
-
-    INFO "设置目录权限..."
-    INFO "这可能需要一定时间，请耐心等待！"
-    chmod -R 777 "${MEDIA_DIR}"
-
-}
-
-function unzip_xiaoya_all_jellyfin() {
-
-    get_config_dir
-
-    get_media_dir
-
-    if [ -d "${MEDIA_DIR}/config" ]; then
-        rm -rf ${MEDIA_DIR}/config
-    fi
-    mkdir -p "${MEDIA_DIR}/xiaoya"
-
-    INFO "开始解压..."
-
-    start_time1=$(date +%s)
-
-    config_size=$(du -k ${MEDIA_DIR}/temp/config_jf.mp4 | cut -f1)
-    if [[ "$config_size" -le 3200000 ]]; then
-        ERROR "config_jf.mp4 下载不完整，文件大小(in KB):$config_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media"
-    pull_run_glue 7z x -aoa -mmt=16 temp/config_jf.mp4
-    mv ${MEDIA_DIR}/jf_config ${MEDIA_DIR}/config
-
-    all_size=$(du -k ${MEDIA_DIR}/temp/all_jf.mp4 | cut -f1)
-    if [[ "$all_size" -le 30000000 ]]; then
-        ERROR "all_jf.mp4 下载不完整，文件大小(in KB):$all_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media/xiaoya"
-    pull_run_glue 7z x -aoa -mmt=16 /media/temp/all_jf.mp4
-
-    pikpak_size=$(du -k ${MEDIA_DIR}/temp/PikPak_jf.mp4 | cut -f1)
-    if [[ "$pikpak_size" -le 14000000 ]]; then
-        ERROR "PikPak_jf.mp4 下载不完整，文件大小(in KB):$pikpak_size 小于预期"
-        exit 1
-    fi
-    extra_parameters="--workdir=/media/xiaoya"
-    pull_run_glue 7z x -aoa -mmt=16 /media/temp/PikPak_jf.mp4
-
-    end_time1=$(date +%s)
-    total_time1=$((end_time1 - start_time1))
-    total_time1=$((total_time1 / 60))
-    INFO "解压执行时间：$total_time1 分钟"
-
-    INFO "设置目录权限..."
-    INFO "这可能需要一定时间，请耐心等待！"
-    chmod -R 777 "${MEDIA_DIR}"
-
-    INFO "解压完成！"
-
-}
-
-function download_xiaoya_jellyfin() {
-
-    get_config_dir
-
-    get_media_dir
-
-    test_xiaoya_status
-
-    mkdir -p "${MEDIA_DIR}"/temp
-    chown 0:0 "${MEDIA_DIR}"/temp
-    chmod 777 "${MEDIA_DIR}"/temp
-    free_size=$(df -P "${MEDIA_DIR}" | tail -n1 | awk '{print $4}')
-    free_size=$((free_size))
-    free_size_G=$((free_size / 1024 / 1024))
-    INFO "磁盘容量：${free_size_G}G"
-
-    if [ -f "${MEDIA_DIR}/temp/${1}" ]; then
-        INFO "清理旧 ${1} 中..."
-        rm -f ${MEDIA_DIR}/temp/${1}
-        if [ -f "${MEDIA_DIR}/temp/${1}.aria2" ]; then
-            rm -rf ${MEDIA_DIR}/temp/${1}.aria2
-        fi
-    fi
-
-    INFO "开始下载 ${1} ..."
-    INFO "下载路径：${MEDIA_DIR}/temp/${1}"
-
-    extra_parameters="--workdir=/media/temp"
-
-    if pull_run_glue aria2c -o "${1}" --allow-overwrite=true --auto-file-renaming=false --enable-color=false -c -x6 "${xiaoya_addr}/d/元数据/Jellyfin/${1}"; then
-        if [ -f "${MEDIA_DIR}/temp/${1}.aria2" ]; then
-            ERROR "存在 ${MEDIA_DIR}/temp/${1}.aria2 文件，下载不完整！"
-            exit 1
-        else
-            INFO "${1} 下载成功！"
-        fi
-    else
-        ERROR "${1} 下载失败！"
-        exit 1
-    fi
-
-    INFO "设置目录权限..."
-    chmod 777 "${MEDIA_DIR}"/temp/"${1}"
-    chown 0:0 "${MEDIA_DIR}"/temp/"${1}"
-
-    INFO "下载完成！"
-
-}
-
-function download_wget_xiaoya_jellyfin() {
-
-    get_config_dir
-
-    get_media_dir
-
-    test_xiaoya_status
-
-    mkdir -p "${MEDIA_DIR}"/temp
-    chown 0:0 "${MEDIA_DIR}"/temp
-    chmod 777 "${MEDIA_DIR}"/temp
-    free_size=$(df -P "${MEDIA_DIR}" | tail -n1 | awk '{print $4}')
-    free_size=$((free_size))
-    free_size_G=$((free_size / 1024 / 1024))
-    INFO "磁盘容量：${free_size_G}G"
-
-    if [ -f "${MEDIA_DIR}/temp/${1}" ]; then
-        INFO "清理旧 ${1} 中..."
-        rm -f ${MEDIA_DIR}/temp/${1}
-        if [ -f "${MEDIA_DIR}/temp/${1}.aria2" ]; then
-            rm -rf ${MEDIA_DIR}/temp/${1}.aria2
-        fi
-    fi
-
-    INFO "开始下载 ${1} ..."
-    INFO "下载路径：${MEDIA_DIR}/temp/${1}"
-
-    extra_parameters="--workdir=/media/temp"
-
-    if pull_run_glue wget -c --show-progress "${xiaoya_addr}/d/元数据/Jellyfin/${1}"; then
-        if [ -f "${MEDIA_DIR}/temp/${1}.aria2" ]; then
-            ERROR "存在 ${MEDIA_DIR}/temp/${1}.aria2 文件，下载不完整！"
-            exit 1
-        else
-            INFO "${1} 下载成功！"
-        fi
-    else
-        ERROR "${1} 下载失败！"
-        exit 1
-    fi
-
-    INFO "设置目录权限..."
-    chmod 777 "${MEDIA_DIR}"/temp/"${1}"
-    chown 0:0 "${MEDIA_DIR}"/temp/"${1}"
-
-    INFO "下载完成！"
-
-}
-
-function unzip_xiaoya_jellyfin() {
-
-    get_config_dir
-
-    get_media_dir
-
-    free_size=$(df -P "${MEDIA_DIR}" | tail -n1 | awk '{print $4}')
-    free_size=$((free_size))
-    free_size_G=$((free_size / 1024 / 1024))
-    INFO "磁盘容量：${free_size_G}G"
-
-    chmod 777 "${MEDIA_DIR}"
-    chown root:root "${MEDIA_DIR}"
-
-    INFO "开始解压 ${MEDIA_DIR}/temp/${1} ..."
-
-    if [ -f "${MEDIA_DIR}/temp/${1}.aria2" ]; then
-        ERROR "存在 ${MEDIA_DIR}/temp/${1}.aria2 文件，文件不完整！"
-        exit 1
-    fi
-
-    start_time1=$(date +%s)
-
-    if [ "${1}" == "config_jf.mp4" ]; then
-        extra_parameters="--workdir=/media"
-
-        if [ -d "${MEDIA_DIR}/config" ]; then
-            rm -rf ${MEDIA_DIR}/config
-        fi
-
-        config_size=$(du -k ${MEDIA_DIR}/temp/config_jf.mp4 | cut -f1)
-        if [[ "$config_size" -le 3200000 ]]; then
-            ERROR "config_jf.mp4 下载不完整，文件大小(in KB):$config_size 小于预期"
-            exit 1
-        else
-            INFO "config_jf.mp4 文件大小验证正常"
-            pull_run_glue 7z x -aoa -mmt=16 temp/config_jf.mp4
-            mv ${MEDIA_DIR}/jf_config ${MEDIA_DIR}/config
-        fi
-
-        INFO "设置目录权限..."
-        chmod 777 "${MEDIA_DIR}"/config
-    elif [ "${1}" == "all_jf.mp4" ]; then
-        extra_parameters="--workdir=/media/xiaoya"
-
-        mkdir -p "${MEDIA_DIR}"/xiaoya
-
-        all_size=$(du -k ${MEDIA_DIR}/temp/all_jf.mp4 | cut -f1)
-        if [[ "$all_size" -le 30000000 ]]; then
-            ERROR "all_jf.mp4 下载不完整，文件大小(in KB):$all_size 小于预期"
-            exit 1
-        else
-            INFO "all_jf.mp4 文件大小验证正常"
-            pull_run_glue 7z x -aoa -mmt=16 /media/temp/all_jf.mp4
-        fi
-
-        INFO "设置目录权限..."
-        chmod 777 "${MEDIA_DIR}"/xiaoya
-    elif [ "${1}" == "PikPak_jf.mp4" ]; then
-        extra_parameters="--workdir=/media/xiaoya"
-
-        mkdir -p "${MEDIA_DIR}"/xiaoya
-
-        pikpak_size=$(du -k ${MEDIA_DIR}/temp/PikPak_jf.mp4 | cut -f1)
-        if [[ "$pikpak_size" -le 14000000 ]]; then
-            ERROR "PikPak_jf.mp4 下载不完整，文件大小(in KB):$pikpak_size 小于预期"
-            exit 1
-        else
-            INFO "PikPak_jf.mp4 文件大小验证正常"
-            pull_run_glue 7z x -aoa -mmt=16 /media/temp/PikPak_jf.mp4
-        fi
-
-        INFO "设置目录权限..."
-        chmod 777 "${MEDIA_DIR}"/xiaoya
-    fi
-
-    end_time1=$(date +%s)
-    total_time1=$((end_time1 - start_time1))
-    total_time1=$((total_time1 / 60))
-    INFO "解压执行时间：$total_time1 分钟"
-
-    INFO "解压完成！"
-
-}
-
-function main_download_unzip_xiaoya_jellyfin() {
-
-    __data_downloader=$(cat ${DDSREM_CONFIG_DIR}/data_downloader.txt)
-
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}下载/解压 元数据${Font}\n"
-    echo -e "1、下载并解压 全部元数据"
-    echo -e "2、解压 全部元数据"
-    echo -e "3、下载 all_jf.mp4"
-    echo -e "4、解压 all_jf.mp4"
-    echo -e "5、解压 all_jf.mp4 的指定元数据目录【非全部解压】"
-    echo -e "6、下载 config_jf.mp4"
-    echo -e "7、解压 config_jf.mp4"
-    echo -e "8、下载 PikPak_jf.mp4"
-    echo -e "9、解压 PikPak_jf.mp4"
-    echo -e "10、当前下载器【aria2/wget】                  当前状态：${Green}${__data_downloader}${Font}"
-    echo -e "0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-10]:" num
-    case "$num" in
-    1)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_unzip_xiaoya_all_jellyfin
-        else
-            download_unzip_xiaoya_all_jellyfin
-        fi
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    2)
-        clear
-        unzip_xiaoya_all_jellyfin
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    3)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_jellyfin "all_jf.mp4"
-        else
-            download_xiaoya_jellyfin "all_jf.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    4)
-        clear
-        unzip_xiaoya_jellyfin "all_jf.mp4"
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    5)
-        clear
-        unzip_appoint_xiaoya_emby_jellyfin "all_jf.mp4"
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    6)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_jellyfin "config_jf.mp4"
-        else
-            download_xiaoya_jellyfin "config_jf.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    7)
-        clear
-        unzip_xiaoya_jellyfin "config_jf.mp4"
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    8)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_jellyfin "PikPak_jf.mp4"
-        else
-            download_xiaoya_jellyfin "PikPak_jf.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    9)
-        clear
-        unzip_xiaoya_jellyfin "PikPak_jf.mp4"
-        return_menu "main_download_unzip_xiaoya_jellyfin"
-        ;;
-    10)
-        if [ "${__data_downloader}" == "wget" ]; then
-            echo 'aria2' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
-        elif [ "${__data_downloader}" == "aria2" ]; then
-            echo 'wget' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
-        else
-            echo 'aria2' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
-        fi
-        clear
-        main_download_unzip_xiaoya_jellyfin
-        ;;
-    0)
-        clear
-        main_xiaoya_all_jellyfin
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-10]'
-        main_download_unzip_xiaoya_jellyfin
-        ;;
-    esac
-
-}
-
 function install_emby_embyserver() {
 
     cpu_arch=$(uname -m)
@@ -3423,89 +2534,6 @@ function oneclick_upgrade_emby() {
             exit 1
         fi
     fi
-
-}
-
-function install_jellyfin_xiaoya_all_jellyfin() {
-
-    get_docker0_url
-
-    MODE=bridge
-
-    get_xiaoya_hosts
-
-    get_nsswitch_conf_path
-
-    echo "http://$docker0:6909" > "${CONFIG_DIR}"/jellyfin_server.txt
-
-    if [ ! -f "${CONFIG_DIR}"/infuse_api_key.txt ]; then
-        echo "e825ed6f7f8f44ffa0563cddaddce14d" > "${CONFIG_DIR}"/infuse_api_key.txt
-    fi
-
-    cpu_arch=$(uname -m)
-    INFO "您的架构是：$cpu_arch"
-    case $cpu_arch in
-    "x86_64" | *"amd64"*)
-        docker_pull "nyanmisaka/jellyfin:240220-amd64-legacy"
-        docker run -d \
-            --name "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_jellyfin_name.txt)" \
-            -v ${NSSWITCH}:/etc/nsswitch.conf \
-            --add-host="xiaoya.host:$xiaoya_host" \
-            -v "${MEDIA_DIR}/config:/config" \
-            -v "${MEDIA_DIR}/xiaoya:/media" \
-            -v "${MEDIA_DIR}/config/cache:/cache" \
-            --user 0:0 \
-            -p 6909:8096 \
-            -p 6920:8920 \
-            -p 1909:1900/udp \
-            -p 7369:7359/udp \
-            --privileged=true \
-            --restart=always \
-            -e TZ=Asia/Shanghai \
-            nyanmisaka/jellyfin:240220-amd64-legacy
-        ;;
-    "aarch64" | *"arm64"* | *"armv8"* | *"arm/v8"*)
-        docker_pull "nyanmisaka/jellyfin:240220-arm64"
-        docker run -d \
-            --name "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_jellyfin_name.txt)" \
-            -v ${NSSWITCH}:/etc/nsswitch.conf \
-            --add-host="xiaoya.host:$xiaoya_host" \
-            -v "${MEDIA_DIR}/config:/config" \
-            -v "${MEDIA_DIR}/xiaoya:/media" \
-            -v "${MEDIA_DIR}/config/cache:/cache" \
-            --user 0:0 \
-            -p 6909:8096 \
-            -p 6920:8920 \
-            -p 1909:1900/udp \
-            -p 7369:7359/udp \
-            --privileged=true \
-            --restart=always \
-            -e TZ=Asia/Shanghai \
-            nyanmisaka/jellyfin:240220-arm64
-        ;;
-    *)
-        ERROR "全家桶 Jellyfin 目前只支持 amd64 和 arm64 架构，你的架构是：$cpu_arch"
-        exit 1
-        ;;
-    esac
-
-    wait_jellyfin_start
-
-    sleep 4
-
-    if ! curl -I -s http://$docker0:2346/ | grep -q "302"; then
-        INFO "重启小雅容器中..."
-        docker restart "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)"
-        wait_xiaoya_start
-    fi
-
-    INFO "Jellyfin 安装完成！"
-    if command -v ifconfig > /dev/null 2>&1; then
-        localip=$(ifconfig -a | grep inet | grep -v 172.17 | grep -v 127.0.0.1 | grep -v inet6 | awk '{print $2}' | sed 's/addr://' | head -n1)
-    else
-        localip=$(ip address | grep inet | grep -v 172.17 | grep -v 127.0.0.1 | grep -v inet6 | awk '{print $2}' | sed 's/addr://' | head -n1 | cut -f1 -d"/")
-    fi
-    INFO "请浏览器访问 ${Sky_Blue}http://${localip}:2346${Font} 登入 Jellyfin，用户名：${Sky_Blue}ailg${Font}   密码：${Sky_Blue}5678${Font}"
 
 }
 
@@ -4219,40 +3247,6 @@ function uninstall_xiaoya_all_emby() {
 
 }
 
-function uninstall_xiaoya_all_jellyfin() {
-
-    OLD_MEDIA_DIR=$(docker inspect \
-        --format='{{range .Mounts}}{{if eq .Destination "/config"}}{{.Source}}{{end}}{{end}}' \
-        "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_jellyfin_name.txt)" |
-        sed 's!/[^/]*$!!')
-    INFO "是否${Red}删除配置文件${Font} [Y/n]（默认 Y 删除）"
-    INFO "配置文件路径：${OLD_MEDIA_DIR}"
-    read -erp "Clean config:" CLEAN_CONFIG
-    [[ -z "${CLEAN_CONFIG}" ]] && CLEAN_CONFIG="y"
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始卸载小雅Jellyfin全家桶${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    docker stop "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_jellyfin_name.txt)"
-    docker rm "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_jellyfin_name.txt)"
-    cpu_arch=$(uname -m)
-    case $cpu_arch in
-    "x86_64" | *"amd64"*)
-        docker rmi nyanmisaka/jellyfin:240220-amd64-legacy
-        ;;
-    "aarch64" | *"arm64"* | *"armv8"* | *"arm/v8"*)
-        docker rmi nyanmisaka/jellyfin:240220-arm64
-        ;;
-    esac
-    if [[ ${CLEAN_CONFIG} == [Yy] ]]; then
-        rm -rf "${OLD_MEDIA_DIR}"
-    fi
-
-    INFO "Jellyfin 全家桶卸载成功！"
-
-}
-
 function main_xiaoya_all_emby() {
 
     echo -e "——————————————————————————————————————————————————————————————————————————————————"
@@ -4405,75 +3399,6 @@ function main_xiaoya_all_emby() {
         clear
         ERROR '请输入正确数字 [0-11]'
         main_xiaoya_all_emby
-        ;;
-    esac
-
-}
-
-function main_xiaoya_all_jellyfin() {
-
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}小雅Jellyfin全家桶${Font}\n"
-    echo -e "${Sky_Blue}Jellyfin 全家桶元数据由 AI老G 更新维护，在此表示感谢！"
-    echo -e "Jellyfin 全家桶安装前提条件："
-    echo -e "1. 硬盘140G以上（如果无需完整安装则 60G 以上即可）"
-    echo -e "2. 内存3.5G以上空余空间${Font}"
-    echo -e "\n${Red}注意：目前官方 Jellyfin 安装方案已经长久未维护！"
-    echo -e "如果您需要安装 小雅Jellyfin 全家桶，请使用 AI老G 的脚本安装，风险自担。"
-    echo -e "脚本命令：bash <(curl -sSLf https://xy.ggbond.org/xy/xy_install.sh)${Font}"
-    if docker container inspect "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)" > /dev/null 2>&1; then
-        local container_status
-        container_status=$(docker inspect --format='{{.State.Status}}' "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)")
-        case "${container_status}" in
-        "running")
-            echo
-            ;;
-        *)
-            echo -e "\n${Red}警告：您的小雅容器未正常启动，请先检查小雅容器后再安装全家桶${Font}\n"
-            ;;
-        esac
-    else
-        echo -e "${Red}\n警告：您未安装小雅容器，请先安装小雅容器后再安装全家桶${Font}\n"
-    fi
-    echo -e "1、一键安装Jellyfin全家桶"
-    echo -e "2、下载/解压 元数据"
-    echo -e "3、安装Jellyfin"
-    echo -e "4、卸载Jellyfin全家桶"
-    echo -e "0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-4]:" num
-    case "$num" in
-    1)
-        clear
-        download_unzip_xiaoya_all_jellyfin
-        install_jellyfin_xiaoya_all_jellyfin
-        INFO "Jellyfin 全家桶安装完成！ "
-        return_menu "main_xiaoya_all_jellyfin"
-        ;;
-    2)
-        clear
-        main_download_unzip_xiaoya_jellyfin
-        ;;
-    3)
-        clear
-        get_config_dir
-        get_media_dir
-        install_jellyfin_xiaoya_all_jellyfin
-        return_menu "main_xiaoya_all_jellyfin"
-        ;;
-    4)
-        clear
-        uninstall_xiaoya_all_jellyfin
-        return_menu "main_xiaoya_all_jellyfin"
-        ;;
-    0)
-        clear
-        main_return
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-4]'
-        main_xiaoya_all_jellyfin
         ;;
     esac
 
@@ -4732,6 +3657,7 @@ function update_xiaoya_alist_tvbox() {
         echo -en "即将开始更新小雅Alist-TVBox${Blue} $i ${Font}\r"
         sleep 1
     done
+    # shellcheck disable=SC2034
     container_update_extra_command="sedsh '/\/opt\/atv\/data/d; \/opt\/alist\/data/d' "/tmp/container_update_$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_tvbox_name.txt)""
     container_update "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_tvbox_name.txt)"
 
@@ -4935,116 +3861,6 @@ function main_xiaoya_115_cleaner() {
 
 }
 
-function install_onelist() {
-
-    if [ -f ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt ]; then
-        OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt)
-        INFO "已读取Onelist配置文件路径：${OLD_CONFIG_DIR} (默认不更改回车继续，如果需要更改请输入新路径)"
-        read -erp "CONFIG_DIR:" CONFIG_DIR
-        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR=${OLD_CONFIG_DIR}
-        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt
-    else
-        INFO "请输入配置文件目录（默认 /etc/onelist ）"
-        read -erp "CONFIG_DIR:" CONFIG_DIR
-        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR="/etc/onelist"
-        touch ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt
-        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt
-    fi
-
-    INFO "请输入后台管理端口（默认 5245 ）"
-    read -erp "HT_PORT:" HT_PORT
-    [[ -z "${HT_PORT}" ]] && HT_PORT="5245"
-
-    docker_pull "msterzhang/onelist:latest"
-
-    docker run -itd \
-        -p "${HT_PORT}":5245 \
-        -e PUID=0 \
-        -e PGID=0 \
-        -e UMASK=022 \
-        -e TZ=Asia/Shanghai \
-        -v "${CONFIG_DIR}:/config" \
-        --restart=always \
-        --name="$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_onelist_name.txt)" \
-        msterzhang/onelist:latest
-
-    INFO "安装完成！"
-
-}
-
-function update_onelist() {
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始更新Onelist${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    container_update "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_onelist_name.txt)"
-
-}
-
-function uninstall_onelist() {
-
-    INFO "是否${Red}删除配置文件${Font} [Y/n]（默认 Y 删除）"
-    read -erp "Clean config:" CLEAN_CONFIG
-    [[ -z "${CLEAN_CONFIG}" ]] && CLEAN_CONFIG="y"
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始卸载 Onelist${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    docker stop "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_onelist_name.txt)"
-    docker rm "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_onelist_name.txt)"
-    docker rmi msterzhang/onelist:latest
-    if [[ ${CLEAN_CONFIG} == [Yy] ]]; then
-        INFO "清理配置文件..."
-        if [ -f ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt ]; then
-            OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/onelist_config_dir.txt)
-            rm -rf "${OLD_CONFIG_DIR}"
-        fi
-    fi
-    INFO "Onelist 卸载成功！"
-
-}
-
-function main_onelist() {
-
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}Onelist${Font}\n"
-    echo -e "1、安装"
-    echo -e "2、更新"
-    echo -e "3、卸载"
-    echo -e "0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-3]:" num
-    case "$num" in
-    1)
-        clear
-        install_onelist
-        return_menu "main_onelist"
-        ;;
-    2)
-        clear
-        update_onelist
-        return_menu "main_onelist"
-        ;;
-    3)
-        clear
-        uninstall_onelist
-        return_menu "main_onelist"
-        ;;
-    0)
-        clear
-        main_other_tools
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-3]'
-        main_onelist
-        ;;
-    esac
-
-}
-
 function install_xiaoya_proxy() {
 
     local config_dir
@@ -5174,281 +3990,6 @@ function main_xiaoya_proxy() {
 
 }
 
-function install_portainer() {
-
-    if [ -f ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt ]; then
-        OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt)
-        INFO "已读取Portainer配置文件路径：${OLD_CONFIG_DIR} (默认不更改回车继续，如果需要更改请输入新路径)"
-        read -erp "CONFIG_DIR:" CONFIG_DIR
-        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR=${OLD_CONFIG_DIR}
-        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt
-    else
-        INFO "请输入配置文件目录（默认 /etc/portainer ）"
-        read -erp "CONFIG_DIR:" CONFIG_DIR
-        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR="/etc/portainer"
-        touch ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt
-        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt
-    fi
-
-    INFO "请输入后台HTTP管理端口（默认 9000 ）"
-    read -erp "HTTP_PORT:" HTTP_PORT
-    [[ -z "${HTTP_PORT}" ]] && HTTP_PORT="9000"
-
-    INFO "请输入后台HTTP管理端口（默认 9443 ）"
-    read -erp "HTTPS_PORT:" HTTPS_PORT
-    [[ -z "${HTTPS_PORT}" ]] && HTTPS_PORT="9443"
-
-    INFO "请输入镜像TAG（默认 latest ）"
-    read -erp "TAG:" TAG
-    [[ -z "${TAG}" ]] && TAG="latest"
-
-    docker_pull "portainer/portainer-ce:${TAG}"
-
-    docker run -itd \
-        -p "${HTTPS_PORT}":9443 \
-        -p "${HTTP_PORT}":9000 \
-        --name "$(cat ${DDSREM_CONFIG_DIR}/container_name/portainer_name.txt)" \
-        -e TZ=Asia/Shanghai \
-        --restart=always \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -v "${CONFIG_DIR}:/data" \
-        portainer/portainer-ce:"${TAG}"
-
-    INFO "安装完成！"
-
-}
-
-function update_portainer() {
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始更新Portainer${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    container_update "$(cat ${DDSREM_CONFIG_DIR}/container_name/portainer_name.txt)"
-
-}
-
-function uninstall_portainer() {
-
-    INFO "是否${Red}删除配置文件${Font} [Y/n]（默认 Y 删除）"
-    read -erp "Clean config:" CLEAN_CONFIG
-    [[ -z "${CLEAN_CONFIG}" ]] && CLEAN_CONFIG="y"
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始卸载 Portainer${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    docker stop "$(cat ${DDSREM_CONFIG_DIR}/container_name/portainer_name.txt)"
-    docker rm "$(cat ${DDSREM_CONFIG_DIR}/container_name/portainer_name.txt)"
-    docker image rm "$(docker image ls --filter=reference="portainer/portainer-ce" -q)"
-    if [[ ${CLEAN_CONFIG} == [Yy] ]]; then
-        INFO "清理配置文件..."
-        if [ -f ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt ]; then
-            OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/portainer_config_dir.txt)
-            rm -rf "${OLD_CONFIG_DIR}"
-        fi
-    fi
-    INFO "Portainer 卸载成功！"
-
-}
-
-function main_portainer() {
-
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}Portainer${Font}\n"
-    echo -e "1、安装"
-    echo -e "2、更新"
-    echo -e "3、卸载"
-    echo -e "0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-3]:" num
-    case "$num" in
-    1)
-        clear
-        install_portainer
-        return_menu "main_portainer"
-        ;;
-    2)
-        clear
-        update_portainer
-        return_menu "main_portainer"
-        ;;
-    3)
-        clear
-        uninstall_portainer
-        return_menu "main_portainer"
-        ;;
-    0)
-        clear
-        main_other_tools
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-3]'
-        main_portainer
-        ;;
-    esac
-
-}
-
-function install_auto_symlink() {
-
-    if [ -f ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt ]; then
-        OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt)
-        INFO "已读取Auto_Symlink配置文件路径：${OLD_CONFIG_DIR} (默认不更改回车继续，如果需要更改请输入新路径)"
-        read -erp "CONFIG_DIR:" CONFIG_DIR
-        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR=${OLD_CONFIG_DIR}
-        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt
-    else
-        INFO "请输入配置文件目录（默认 /etc/auto_symlink ）"
-        read -erp "CONFIG_DIR:" CONFIG_DIR
-        [[ -z "${CONFIG_DIR}" ]] && CONFIG_DIR="/etc/auto_symlink"
-        touch ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt
-        echo "${CONFIG_DIR}" > ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt
-    fi
-
-    INFO "请输入后台管理端口（默认 8095 ）"
-    read -erp "PORT:" HTTP_PORT
-    [[ -z "${PORT}" ]] && PORT="8095"
-
-    INFO "请输入挂载目录（可设置多个）（PS：-v /media:/media）"
-    read -erp "Volumes:" volumes
-
-    docker_pull "shenxianmq/auto_symlink:latest"
-
-    if [ -n "${volumes}" ]; then
-        docker run -d \
-            --name="$(cat ${DDSREM_CONFIG_DIR}/container_name/auto_symlink_name.txt)" \
-            -e TZ=Asia/Shanghai \
-            -v "${CONFIG_DIR}:/app/config" \
-            -p "${PORT}":8095 \
-            --restart always \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
-            ${volumes} \
-            shenxianmq/auto_symlink:latest
-    else
-        docker run -d \
-            --name="$(cat ${DDSREM_CONFIG_DIR}/container_name/auto_symlink_name.txt)" \
-            -e TZ=Asia/Shanghai \
-            -v "${CONFIG_DIR}:/app/config" \
-            -p "${PORT}":8095 \
-            --restart always \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
-            shenxianmq/auto_symlink:latest
-    fi
-
-    INFO "安装完成！"
-
-}
-
-function update_auto_symlink() {
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始更新Auto_Symlink${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    container_update "$(cat ${DDSREM_CONFIG_DIR}/container_name/auto_symlink_name.txt)"
-
-}
-
-function uninstall_auto_symlink() {
-
-    INFO "是否${Red}删除配置文件${Font} [Y/n]（默认 Y 删除）"
-    read -erp "Clean config:" CLEAN_CONFIG
-    [[ -z "${CLEAN_CONFIG}" ]] && CLEAN_CONFIG="y"
-
-    for i in $(seq -w 3 -1 0); do
-        echo -en "即将开始卸载 Auto_Symlink${Blue} $i ${Font}\r"
-        sleep 1
-    done
-    docker stop "$(cat ${DDSREM_CONFIG_DIR}/container_name/auto_symlink_name.txt)"
-    docker rm "$(cat ${DDSREM_CONFIG_DIR}/container_name/auto_symlink_name.txt)"
-    docker image rm shenxianmq/auto_symlink:latest
-    if [[ ${CLEAN_CONFIG} == [Yy] ]]; then
-        INFO "清理配置文件..."
-        if [ -f ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt ]; then
-            OLD_CONFIG_DIR=$(cat ${DDSREM_CONFIG_DIR}/auto_symlink_config_dir.txt)
-            rm -rf "${OLD_CONFIG_DIR}"
-        fi
-    fi
-    INFO "Auto_Symlink 卸载成功！"
-
-}
-
-function main_auto_symlink() {
-
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}Auto_Symlink${Font}\n"
-    echo -e "1、安装"
-    echo -e "2、更新"
-    echo -e "3、卸载"
-    echo -e "0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-3]:" num
-    case "$num" in
-    1)
-        clear
-        install_auto_symlink
-        return_menu "main_auto_symlink"
-        ;;
-    2)
-        clear
-        update_auto_symlink
-        return_menu "main_auto_symlink"
-        ;;
-    3)
-        clear
-        uninstall_auto_symlink
-        return_menu "main_auto_symlink"
-        ;;
-    0)
-        clear
-        main_other_tools
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-3]'
-        main_auto_symlink
-        ;;
-    esac
-
-}
-
-function main_casaos() {
-
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}CasaOS${Font}\n"
-    echo -e "1、安装"
-    echo -e "2、卸载"
-    echo -e "0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-2]:" num
-    case "$num" in
-    1)
-        clear
-        curl -fsSL https://get.casaos.io | sudo bash
-        return_menu "main_casaos"
-        ;;
-    2)
-        clear
-        casaos-uninstall
-        return_menu "main_casaos"
-        ;;
-    0)
-        clear
-        main_other_tools
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-2]'
-        main_casaos
-        ;;
-    esac
-
-}
-
 function main_docker_compose() {
 
     echo -e "——————————————————————————————————————————————————————————————————————————————————"
@@ -5493,155 +4034,6 @@ function main_docker_compose() {
         main_docker_compose
         ;;
     esac
-
-}
-
-function auto_choose_image_mirror() {
-
-    for i in "${!mirrors[@]}"; do
-        local output
-        output=$(
-            curl -s -o /dev/null -m 4 -w '%{time_total}' --head --request GET "${mirrors[$i]}"
-            echo $? > /tmp/curl_exit_status_${i} &
-        )
-        # shellcheck disable=SC2004
-        status[$i]=$!
-        # shellcheck disable=SC2004
-        delays[$i]=$output
-    done
-    better_time=9999999999
-    for i in "${!mirrors[@]}"; do
-        local time_compare result
-        wait ${status[$i]}
-        result=$(cat /tmp/curl_exit_status_${i})
-        rm -f /tmp/curl_exit_status_${i}
-        if [ $result -eq 0 ]; then
-            if [ "${mirrors[$i]}" == "docker.io" ]; then
-                time_compare=$(awk -v n1="1" -v n2="$result" 'BEGIN {print (n1>n2)? "1":"0"}')
-                if [ $time_compare -eq 1 ]; then
-                    better_mirror=${mirrors[$i]}
-                    better_time=0
-                fi
-            else
-                time_compare=$(awk -v n1="$better_time" -v n2="$result" 'BEGIN {print (n1>n2)? "1":"0"}')
-                if [ $time_compare -eq 1 ]; then
-                    better_mirror=${mirrors[$i]}
-                    better_time=${delays[$i]}
-                fi
-            fi
-        fi
-    done
-    if [ -z "${better_mirror}" ]; then
-        return 1
-    else
-        echo -e "${better_mirror}" > ${DDSREM_CONFIG_DIR}/image_mirror.txt
-        if docker pull "${better_mirror}/library/hello-world:latest" &> /dev/null; then
-            docker rmi "${better_mirror}/library/hello-world:latest" &> /dev/null
-            return 0
-        else
-            return 1
-        fi
-    fi
-
-}
-
-function choose_image_mirror() {
-
-    local num
-    local current_mirror interface
-    current_mirror="$(cat "${DDSREM_CONFIG_DIR}/image_mirror.txt")"
-    declare -i s
-    local s=0
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    echo -e "${Blue}Docker镜像源选择\n${Font}"
-    echo -ne "${INFO} 界面加载中...${Font}\r"
-    interface="${Sky_Blue}绿色字体代表当前选中的镜像源"
-    interface="${interface}\n选择镜像源后会自动检测是否可连接，如果预选镜像源都无法使用请自定义镜像源${Font}\n"
-    local status=()
-    for i in "${!mirrors[@]}"; do
-        local output
-        output=$(
-            curl -s -o /dev/null -m 4 -w '%{time_total}' --head --request GET "${mirrors[$i]}"
-            echo $? > /tmp/curl_exit_status_${i} &
-        )
-        # shellcheck disable=SC2004
-        status[$i]=$!
-        # shellcheck disable=SC2004
-        delays[$i]=$(printf "%.2f" $output)
-    done
-    for i in "${!mirrors[@]}"; do
-        wait ${status[$i]}
-        local result
-        result=$(cat /tmp/curl_exit_status_${i})
-        rm -f /tmp/curl_exit_status_${i}
-        local color=
-        local font=
-        if [[ "${mirrors[$i]}" == "${current_mirror}" ]]; then
-            color="${Green}"
-            font="${Font}"
-            s+=1
-        fi
-        if [ $result -eq 0 ]; then
-            interface="${interface}\n$((i + 1))、${color}${mirrors[$i]}${font} (${Green}可用${Font} ${Sky_Blue}延迟: ${delays[$i]}秒${Font})"
-        else
-            interface="${interface}\n$((i + 1))、${color}${mirrors[$i]}${font} (${Red}不可用${Font})"
-        fi
-        z=$((i + 2))
-    done
-    if user_delay=$(curl -s -o /dev/null -m 4 -w '%{time_total}' --head --request GET "$(cat "${DDSREM_CONFIG_DIR}/image_mirror_user.txt")"); then
-        USER_TEST_STATUS="(${Green}可用${Font} ${Sky_Blue}延迟: ${user_delay}秒${Font})"
-    else
-        USER_TEST_STATUS="(${Red}不可用${Font})"
-    fi
-    if [ "${s}" == "1" ]; then
-        interface="${interface}\n${z}、自定义源：$(cat "${DDSREM_CONFIG_DIR}/image_mirror_user.txt") ${USER_TEST_STATUS}"
-    else
-        interface="${interface}\n${z}、${Green}自定义源：$(cat "${DDSREM_CONFIG_DIR}/image_mirror_user.txt")${Font} ${USER_TEST_STATUS}"
-    fi
-    echo -e "${interface}\n0、返回上级"
-    echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-${z}]:" num
-    if [ "${num}" == "0" ]; then
-        clear
-        "${1}"
-    elif [ "${num}" == "${z}" ]; then
-        clear
-        INFO "请输入自定义源地址（当前自定义源地址为：$(cat "${DDSREM_CONFIG_DIR}/image_mirror_user.txt")，回车默认不修改）"
-        read -erp "custom_url:" custom_url
-        [[ -z "${custom_url}" ]] && custom_url=$(cat "${DDSREM_CONFIG_DIR}/image_mirror_user.txt")
-        echo "${custom_url}" > ${DDSREM_CONFIG_DIR}/image_mirror.txt
-        echo "${custom_url}" > ${DDSREM_CONFIG_DIR}/image_mirror_user.txt
-    else
-        for i in "${!mirrors[@]}"; do
-            if [[ "$((i + 1))" == "${num}" ]]; then
-                echo -e "${mirrors[$i]}" > ${DDSREM_CONFIG_DIR}/image_mirror.txt
-                break
-            fi
-        done
-    fi
-    clear
-    INFO "开始镜像源地址连通性测试..."
-    local retries=0
-    local max_retries=3
-    IMAGE_MIRROR=$(cat "${DDSREM_CONFIG_DIR}/image_mirror.txt")
-    while [ $retries -lt $max_retries ]; do
-        if docker pull "${IMAGE_MIRROR}/library/hello-world:latest"; then
-            INFO "地址连通性测试正常！"
-            break
-        else
-            WARN "地址连通性测试失败，正在进行第 $((retries + 1)) 次重试..."
-            retries=$((retries + 1))
-        fi
-    done
-    if [ $retries -eq $max_retries ]; then
-        ERROR "地址连通性测试失败，已达到最大重试次数，请选择镜像源或者自定义镜像源！"
-    else
-        docker rmi "${IMAGE_MIRROR}/library/hello-world:latest"
-    fi
-    INFO "按任意键返回 Docker镜像源选择 菜单"
-    read -rs -n 1 -p ""
-    clear
-    choose_image_mirror "${1}"
 
 }
 
@@ -5995,6 +4387,7 @@ function main_return() {
             out_tips="${Red}警告：当前环境无法访问Docker镜像仓库，请输入96进入Docker镜像源设置更改镜像源${Font}\n"
         fi
     fi
+    # shellcheck disable=SC2154
     echo -e "${out_tips}1、安装/更新/卸载 小雅Alist & 账号管理        当前状态：$(judgment_container "${xiaoya_alist_name}")
 2、安装/更新/卸载 小雅Emby全家桶              当前状态：$(judgment_container "${xiaoya_emby_name}")
 3、安装/卸载 小雅Jellyfin全家桶               当前状态：$(judgment_container "${xiaoya_jellyfin_name}")
@@ -6067,12 +4460,6 @@ function main_return() {
 }
 
 function first_init() {
-
-    clear
-
-    INFO "初始化中，请稍等...."
-
-    root_need
 
     INFO "获取系统信息中..."
     get_os
@@ -6163,12 +4550,28 @@ function first_init() {
 
 }
 
+clear
+INFO "初始化中，请稍等...."
+root_need
+if [ ! -d "/tmp/xiaoya_alist_tmp" ]; then
+    mkdir -p /tmp/xiaoya_alist_tmp
+fi
+for file in "base" "image_mirror" "auto_symlink" "jellyfin" "portainer" "onelist" "casaos"; do
+    if ! curl -sSLf "https://gitee.com/ddsrem/xiaoya-alist-base/raw/master/${file}.sh" -o "/tmp/xiaoya_alist_tmp/${file}.sh"; then
+        ERROR "${file} 基础库获取失败！"
+        ERROR "请检查是否能访问 gitee.com！"
+        exit 1
+    else
+        source "/tmp/xiaoya_alist_tmp/${file}.sh"
+        rm -f "/tmp/xiaoya_alist_tmp/${file}.sh"
+        INFO "${file} 基础库加载成功！"
+    fi
+done
+rm -rf /tmp/xiaoya_alist_tmp
+first_init
+clear
 if [ ! "$*" ]; then
-    first_init
-    clear
     main_return
 else
-    first_init
-    clear
     "$@"
 fi
