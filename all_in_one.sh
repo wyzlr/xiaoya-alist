@@ -25,6 +25,7 @@ DATE_VERSION="v1.7.3-2024_08_17_15_25"
 #
 # ——————————————————————————————————————————————————————————————————————————————————
 amilys_embyserver_latest_version=4.8.8.0
+emby_embyserver_latest_version=4.8.8.0
 # ——————————————————————————————————————————————————————————————————————————————————
 
 Sky_Blue="\e[36m"
@@ -237,34 +238,26 @@ function qrcode_aliyunpan_tvtoken() {
     case $cpu_arch in
     "x86_64" | *"amd64"* | "aarch64" | *"arm64"* | *"armv8"* | *"arm/v8"*)
         INFO "阿里云盘 TV Token 配置"
-        local config_dir local_ip
+        local local_ip
         docker_pull ddsderek/xiaoya-glue:python
-        config_dir="$(docker inspect --format='{{range $v,$conf := .Mounts}}{{$conf.Source}}:{{$conf.Destination}}{{$conf.Type}}~{{end}}' "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)" | tr '~' '\n' | grep bind | sed 's/bind//g' | grep ":/data$" | awk -F: '{print $1}')"
-        if [ -n "${config_dir}" ]; then
-            if [[ "${OSNAME}" = "macos" ]]; then
-                local_ip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
-            else
-                local_ip=$(ip address | grep inet | grep -v 172.17 | grep -v 127.0.0.1 | grep -v inet6 | awk '{print $2}' | sed 's/addr://' | head -n1 | cut -f1 -d"/")
-            fi
-            if [ -z "${local_ip}" ]; then
-                local_ip="小雅服务器IP"
-            fi
-            INFO "请浏览器访问 http://${local_ip}:34256 并使用阿里云盘APP扫描二维码！"
-            docker run -i --rm \
-                -v "$config_dir:/data" \
-                -e LANG=C.UTF-8 \
-                --net=host \
-                ddsderek/xiaoya-glue:python \
-                /aliyuntvtoken/alitoken2.py
-            INFO "清理镜像中..."
-            docker rmi ddsderek/xiaoya-glue:python > /dev/null 2>&1
-            INFO "开始更新小雅容器..."
-            container_update "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)"
-            INFO "操作全部完成！"
+        if [[ "${OSNAME}" = "macos" ]]; then
+            local_ip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
         else
-            ERROR "小雅配置文件目录获取失败咯！请检查小雅容器是否已创建！"
-            exit 1
+            local_ip=$(ip address | grep inet | grep -v 172.17 | grep -v 127.0.0.1 | grep -v inet6 | awk '{print $2}' | sed 's/addr://' | head -n1 | cut -f1 -d"/")
         fi
+        if [ -z "${local_ip}" ]; then
+            local_ip="小雅服务器IP"
+        fi
+        INFO "请浏览器访问 http://${local_ip}:34256 并使用阿里云盘APP扫描二维码！"
+        docker run -i --rm \
+            -v "${1}:/data" \
+            -e LANG=C.UTF-8 \
+            --net=host \
+            ddsderek/xiaoya-glue:python \
+            /aliyuntvtoken/alitoken2.py
+        INFO "清理镜像中..."
+        docker rmi ddsderek/xiaoya-glue:python > /dev/null 2>&1
+        INFO "操作全部完成！"
         ;;
     *)
         WARN "目前阿里云盘 TV Token 扫码获取只支持amd64和arm64架构，你的架构是：$cpu_arch"
@@ -495,12 +488,12 @@ function settings_aliyunpan_opentoken() {
     fi
 
     if [ "${2}" == "force" ]; then
-        qrcode_aliyunpan_opentoken "${1}"
+        enter_aliyunpan_opentoken "${1}"
     else
         myopentokenfilesize=$(cat "${1}"/myopentoken.txt)
         myopentokenstringsize=${#myopentokenfilesize}
         if [ "$myopentokenstringsize" -le 279 ]; then
-            qrcode_aliyunpan_opentoken "${1}"
+            enter_aliyunpan_opentoken "${1}"
         fi
     fi
 
@@ -1780,109 +1773,109 @@ function main_download_unzip_xiaoya_emby() {
     echo -e "13、当前下载器【aria2/wget】                  当前状态：${Green}${__data_downloader}${Font}"
     echo -e "0、返回上级"
     echo -e "——————————————————————————————————————————————————————————————————————————————————"
-    read -erp "请输入数字 [0-13]:" num
-    case "$num" in
-    1)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_unzip_xiaoya_all_emby
+    read -erp "请输入数字（支持输入多个数字，空格分离，按输入顺序执行）[0-13]:" -a nums
+    for num in "${nums[@]}"; do
+        if [ $num -ge 1 ] && [ $num -le 12 ]; then
+            case "$num" in
+            1)
+                clear
+                if [ "${__data_downloader}" == "wget" ]; then
+                    download_wget_unzip_xiaoya_all_emby
+                else
+                    download_unzip_xiaoya_all_emby
+                fi
+                ;;
+            2)
+                clear
+                unzip_xiaoya_all_emby
+                ;;
+            3)
+                clear
+                if [ "${__data_downloader}" == "wget" ]; then
+                    download_wget_xiaoya_emby "all.mp4"
+                else
+                    download_xiaoya_emby "all.mp4"
+                fi
+                ;;
+            4)
+                clear
+                unzip_xiaoya_emby "all.mp4"
+                ;;
+            5)
+                clear
+                unzip_appoint_xiaoya_emby_jellyfin "all.mp4"
+                ;;
+            6)
+                clear
+                if [ "${__data_downloader}" == "wget" ]; then
+                    download_wget_xiaoya_emby "config.mp4"
+                else
+                    download_xiaoya_emby "config.mp4"
+                fi
+                ;;
+            7)
+                clear
+                unzip_xiaoya_emby "config.mp4"
+                ;;
+            8)
+                clear
+                if [ "${__data_downloader}" == "wget" ]; then
+                    download_wget_xiaoya_emby "pikpak.mp4"
+                else
+                    download_xiaoya_emby "pikpak.mp4"
+                fi
+                ;;
+            9)
+                clear
+                unzip_xiaoya_emby "pikpak.mp4"
+                ;;
+            10)
+                clear
+                if [ "${__data_downloader}" == "wget" ]; then
+                    download_wget_xiaoya_emby "115.mp4"
+                else
+                    download_xiaoya_emby "115.mp4"
+                fi
+                ;;
+            11)
+                clear
+                unzip_xiaoya_emby "115.mp4"
+                ;;
+            12)
+                clear
+                unzip_appoint_xiaoya_emby_jellyfin "115.mp4"
+                ;;
+            esac
+            __next_operate=return_menu
+        elif [ $num == 13 ]; then
+            if [ "${__data_downloader}" == "wget" ]; then
+                echo 'aria2' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
+            elif [ "${__data_downloader}" == "aria2" ]; then
+                echo 'wget' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
+            else
+                echo 'aria2' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
+            fi
+            clear
+            __next_operate=main_download_unzip_xiaoya_emby
+            break
+        elif [ $num == 0 ]; then
+            clear
+            __next_operate=main_xiaoya_all_emby
+            break
         else
-            download_unzip_xiaoya_all_emby
+            clear
+            ERROR '请输入正确数字 [0-13]'
+            __next_operate=main_download_unzip_xiaoya_emby
+            break
         fi
+    done
+    if [ "${__next_operate}" == "return_menu" ]; then
         return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    2)
-        clear
-        unzip_xiaoya_all_emby
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    3)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_emby "all.mp4"
-        else
-            download_xiaoya_emby "all.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    4)
-        clear
-        unzip_xiaoya_emby "all.mp4"
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    5)
-        clear
-        unzip_appoint_xiaoya_emby_jellyfin "all.mp4"
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    6)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_emby "config.mp4"
-        else
-            download_xiaoya_emby "config.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    7)
-        clear
-        unzip_xiaoya_emby "config.mp4"
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    8)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_emby "pikpak.mp4"
-        else
-            download_xiaoya_emby "pikpak.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    9)
-        clear
-        unzip_xiaoya_emby "pikpak.mp4"
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    10)
-        clear
-        if [ "${__data_downloader}" == "wget" ]; then
-            download_wget_xiaoya_emby "115.mp4"
-        else
-            download_xiaoya_emby "115.mp4"
-        fi
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    11)
-        clear
-        unzip_xiaoya_emby "115.mp4"
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    12)
-        clear
-        unzip_appoint_xiaoya_emby_jellyfin "115.mp4"
-        return_menu "main_download_unzip_xiaoya_emby"
-        ;;
-    13)
-        if [ "${__data_downloader}" == "wget" ]; then
-            echo 'aria2' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
-        elif [ "${__data_downloader}" == "aria2" ]; then
-            echo 'wget' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
-        else
-            echo 'aria2' > ${DDSREM_CONFIG_DIR}/data_downloader.txt
-        fi
-        clear
+    elif [ "${__next_operate}" == "main_download_unzip_xiaoya_emby" ]; then
         main_download_unzip_xiaoya_emby
-        ;;
-    0)
-        clear
+    elif [ "${__next_operate}" == "main_xiaoya_all_emby" ]; then
         main_xiaoya_all_emby
-        ;;
-    *)
-        clear
-        ERROR '请输入正确数字 [0-13]'
-        main_download_unzip_xiaoya_emby
-        ;;
-    esac
+    fi
 
 }
 
@@ -2355,7 +2348,7 @@ function install_emby_xiaoya_all_emby() {
                 break
                 ;;
             "emby_embyserver")
-                INFO "请选择 Emby 镜像版本 [ 1；4.8.0.56 | 2；4.8.8.0 | 3；latest ]（默认 1）"
+                INFO "请选择 Emby 镜像版本 [ 1；4.8.0.56 | 2；4.8.8.0 | 3；latest（${emby_embyserver_latest_version}） ]（默认 1）"
                 read -erp "CHOOSE_IMAGE_VERSION:" CHOOSE_IMAGE_VERSION
                 [[ -z "${CHOOSE_IMAGE_VERSION}" ]] && CHOOSE_IMAGE_VERSION="1"
                 case ${CHOOSE_IMAGE_VERSION} in
@@ -2456,7 +2449,7 @@ function oneclick_upgrade_emby() {
             WARN "lovechen/embyserver 镜像无法更新！"
             exit 0
         elif [ "${old_image_name}" == "emby/embyserver" ] || [ "${old_image_name}" == "emby/embyserver_arm64v8" ]; then
-            INFO "请选择 Emby 镜像版本 [ 1；4.8.8.0 | 2；latest | 3；beta（此版本请勿轻易尝试） ]（默认 1）"
+            INFO "请选择 Emby 镜像版本 [ 1；4.8.8.0 | 2；latest（${emby_embyserver_latest_version}） | 3；beta（此版本请勿轻易尝试） ]（默认 1）"
             read -erp "CHOOSE_IMAGE_VERSION:" CHOOSE_IMAGE_VERSION
             [[ -z "${CHOOSE_IMAGE_VERSION}" ]] && CHOOSE_IMAGE_VERSION="1"
             case ${CHOOSE_IMAGE_VERSION} in
@@ -4444,7 +4437,15 @@ function main_return() {
     fuckaliyun)
         clear
         INFO "AliyunPan ありがとう、あなたのせいで世界は爆発する"
-        qrcode_aliyunpan_tvtoken
+        config_dir="$(docker inspect --format='{{range $v,$conf := .Mounts}}{{$conf.Source}}:{{$conf.Destination}}{{$conf.Type}}~{{end}}' "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)" | tr '~' '\n' | grep bind | sed 's/bind//g' | grep ":/data$" | awk -F: '{print $1}')"
+        if [ -n "${config_dir}" ]; then
+            qrcode_aliyunpan_tvtoken "${config_dir}"
+            INFO "开始更新小雅容器..."
+            container_update "$(cat ${DDSREM_CONFIG_DIR}/container_name/xiaoya_alist_name.txt)"
+        else
+            ERROR "小雅配置文件目录获取失败咯！请检查小雅容器是否已创建！"
+            exit 1
+        fi
         return_menu "main_return"
         ;;
     0)
