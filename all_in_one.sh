@@ -119,8 +119,6 @@ function wait_xiaoya_start() {
 function clear_qrcode_container() {
 
     # shellcheck disable=SC2046
-    docker rm -f $(docker ps -a -q --filter ancestor=ddsderek/xiaoya-glue:quark_cookie) > /dev/null 2>&1
-    # shellcheck disable=SC2046
     docker rm -f $(docker ps -a -q --filter ancestor=ddsderek/xiaoya-glue:python) > /dev/null 2>&1
 
 }
@@ -274,9 +272,19 @@ function qrcode_aliyunpan_refreshtoken() {
     case $cpu_arch in
     "x86_64" | *"amd64"* | "aarch64" | *"arm64"* | *"armv8"* | *"arm/v8"*)
         INFO "阿里云盘 Refresh Token 配置"
-        local local_ip
+        local local_ip command_file
         INFO "拉取镜像中..."
         docker_pull ddsderek/xiaoya-glue:python
+        if curl -Is https://api.xhofe.top/alist/ali/qr | head -n 1 | grep -q '200'; then
+            command_file="aliyuntoken.py"
+            INFO "使用 api.xhofe.top 地址"
+        elif curl -Is https://api-cf.nn.ci/alist/ali/qr | head -n 1 | grep -q '200'; then
+            command_file="aliyuntoken_nn.ci.py"
+            INFO "使用 api-cf.nn.ci 地址"
+        else
+            command_file="aliyuntoken_vercel.py"
+            INFO "使用 aliyuntoken.vercel.app 地址"
+        fi
         if [[ "${OSNAME}" = "macos" ]]; then
             local_ip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
         else
@@ -291,7 +299,7 @@ function qrcode_aliyunpan_refreshtoken() {
             -e LANG=C.UTF-8 \
             --net=host \
             ddsderek/xiaoya-glue:python \
-            /aliyuntoken/aliyuntoken.py
+            "/aliyuntoken/${command_file}"
         INFO "清理镜像中..."
         docker rmi ddsderek/xiaoya-glue:python > /dev/null 2>&1
         INFO "操作全部完成！"
@@ -310,9 +318,16 @@ function qrcode_aliyunpan_opentoken() {
     case $cpu_arch in
     "x86_64" | *"amd64"* | "aarch64" | *"arm64"* | *"armv8"* | *"arm/v8"*)
         INFO "阿里云盘 Open Token 配置"
-        local local_ip
+        local local_ip command_file
         INFO "拉取镜像中..."
         docker_pull ddsderek/xiaoya-glue:python
+        if curl -Is https://api.xhofe.top/alist/ali_open/qr | head -n 1 | grep -q '200'; then
+            command_file="aliyunopentoken.py"
+            INFO "使用 api.xhofe.top 地址"
+        else
+            command_file="aliyunopentoken_nn.ci.py"
+            INFO "使用 api-cf.nn.ci 地址"
+        fi
         if [[ "${OSNAME}" = "macos" ]]; then
             local_ip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
         else
@@ -327,7 +342,7 @@ function qrcode_aliyunpan_opentoken() {
             -e LANG=C.UTF-8 \
             --net=host \
             ddsderek/xiaoya-glue:python \
-            /aliyunopentoken/aliyunopentoken.py
+            "/aliyunopentoken/${command_file}"
         INFO "清理镜像中..."
         docker rmi ddsderek/xiaoya-glue:python > /dev/null 2>&1
         INFO "操作全部完成！"
@@ -384,7 +399,7 @@ function qrcode_quark_cookie() {
         INFO "夸克 Cookie 扫码获取"
         local local_ip
         INFO "拉取镜像中..."
-        docker_pull ddsderek/xiaoya-glue:quark_cookie
+        docker_pull ddsderek/xiaoya-glue:python
         if [[ "${OSNAME}" = "macos" ]]; then
             local_ip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
         else
@@ -398,13 +413,50 @@ function qrcode_quark_cookie() {
             -v "${1}:/data" \
             -e LANG=C.UTF-8 \
             --net=host \
-            ddsderek/xiaoya-glue:quark_cookie
+            ddsderek/xiaoya-glue:python \
+            /quark_cookie/quark_cookie.py
         INFO "清理镜像中..."
-        docker rmi ddsderek/xiaoya-glue:quark_cookie
+        docker rmi ddsderek/xiaoya-glue:python
         INFO "操作全部完成！"
         ;;
     *)
         WARN "目前夸克 Cookie 扫码获取只支持amd64和arm64架构，你的架构是：$cpu_arch"
+        ;;
+    esac
+
+}
+
+function qrcode_uc_cookie() {
+
+    clear_qrcode_container
+    cpu_arch=$(uname -m)
+    case $cpu_arch in
+    "x86_64" | *"amd64"* | "aarch64" | *"arm64"* | *"armv8"* | *"arm/v8"*)
+        INFO "UC Cookie 扫码获取"
+        local local_ip
+        INFO "拉取镜像中..."
+        docker_pull ddsderek/xiaoya-glue:python
+        if [[ "${OSNAME}" = "macos" ]]; then
+            local_ip=$(ifconfig "$(route -n get default | grep interface | awk -F ':' '{print$2}' | awk '{$1=$1};1')" | grep 'inet ' | awk '{print$2}')
+        else
+            local_ip=$(ip address | grep inet | grep -v 172.17 | grep -v 127.0.0.1 | grep -v inet6 | awk '{print $2}' | sed 's/addr://' | head -n1 | cut -f1 -d"/")
+        fi
+        if [ -z "${local_ip}" ]; then
+            local_ip="小雅服务器IP"
+        fi
+        INFO "请稍等片刻直到 Flask 启动后浏览器访问 http://${local_ip}:34256 并使用UC浏览器APP扫描二维码！"
+        docker run -i --rm \
+            -v "${1}:/data" \
+            -e LANG=C.UTF-8 \
+            --net=host \
+            ddsderek/xiaoya-glue:python \
+            /uc_cookie/uc_cookie.py
+        INFO "清理镜像中..."
+        docker rmi ddsderek/xiaoya-glue:python
+        INFO "操作全部完成！"
+        ;;
+    *)
+        WARN "目前 UC Cookie 扫码获取只支持amd64和arm64架构，你的架构是：$cpu_arch"
         ;;
     esac
 
@@ -582,14 +634,22 @@ function settings_quark_cookie() {
 function enter_uc_cookie() {
 
     touch ${1}/uc_cookie.txt
-    while true; do
-        INFO "输入你的 UC Cookie"
-        read -erp "Cookie:" uc_cookie
-        echo -e "${uc_cookie}" > ${1}/uc_cookie.txt
-        if check_uc_cookie "${1}"; then
-            break
-        fi
-    done
+    INFO "是否使用扫码自动 Cookie [Y/n]（默认 Y）"
+    read -erp "Cookie:" choose_qrcode_uc_cookie
+    [[ -z "${choose_qrcode_uc_cookie}" ]] && choose_qrcode_uc_cookie="y"
+    if [[ ${choose_qrcode_uc_cookie} == [Yy] ]]; then
+        qrcode_uc_cookie "${1}"
+    fi
+    if ! check_uc_cookie "${1}"; then
+        while true; do
+            INFO "输入你的 UC Cookie"
+            read -erp "Cookie:" uc_cookie
+            echo -e "${uc_cookie}" > ${1}/uc_cookie.txt
+            if check_uc_cookie "${1}"; then
+                break
+            fi
+        done
+    fi
 
 }
 
